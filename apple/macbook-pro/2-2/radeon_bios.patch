@@ -1,0 +1,82 @@
+--- linux-5.4.105/drivers/gpu/drm/radeon/radeon_bios.c.orig	2021-03-20 14:13:04.224874027 -0700
++++ linux-5.4.105/drivers/gpu/drm/radeon/radeon_bios.c	2021-03-20 14:58:15.568629971 -0700
+@@ -33,6 +33,7 @@
+ #include <drm/drm_pci.h>
+ 
+ #include "atom.h"
++#include <linux/firmware.h>
+ #include "radeon.h"
+ #include "radeon_reg.h"
+ 
+@@ -60,15 +61,18 @@
+ 	vram_base = pci_resource_start(rdev->pdev, 0);
+ 	bios = ioremap(vram_base, size);
+ 	if (!bios) {
++	     DRM_ERROR("No bios\n");
+ 		return false;
+ 	}
+ 
+ 	if (size == 0 || bios[0] != 0x55 || bios[1] != 0xaa) {
++	     DRM_ERROR("Invalid bios\n");
+ 		iounmap(bios);
+ 		return false;
+ 	}
+ 	rdev->bios = kmalloc(size, GFP_KERNEL);
+ 	if (rdev->bios == NULL) {
++		DRM_ERROR("alloc fail\n");
+ 		iounmap(bios);
+ 		return false;
+ 	}
+@@ -77,6 +81,41 @@
+ 	return true;
+ }
+ 
++static bool radeon_read_bios_from_firmware(struct radeon_device *rdev)
++{
++	const uint8_t __iomem *bios;
++	resource_size_t size;
++	const struct firmware *fw = NULL;
++
++	request_firmware(&fw, "radeon/vbios.bin", rdev->dev);
++	if (!fw) {
++		DRM_ERROR("No bios\n");
++		return false;
++	}
++	size = fw->size;
++	bios = fw->data;
++
++	if (!bios) {
++		DRM_ERROR("No bios\n");
++		return false;
++	}
++
++	if (size == 0 || bios[0] != 0x55 || bios[1] != 0xaa) {
++		DRM_ERROR("wrong sig\n");
++		release_firmware(fw);
++		return false;
++	}
++	rdev->bios = kmalloc(size, GFP_KERNEL);
++	if (rdev->bios == NULL) {
++		DRM_ERROR("alloc fail\n");
++		release_firmware(fw);
++		return false;
++	}
++	memcpy(rdev->bios, bios, size);
++	release_firmware(fw);
++	return true;
++}
++
+ static bool radeon_read_bios(struct radeon_device *rdev)
+ {
+ 	uint8_t __iomem *bios, val1, val2;
+@@ -671,7 +710,9 @@
+ 	bool r;
+ 	uint16_t tmp;
+ 
+-	r = radeon_atrm_get_bios(rdev);
++	r = radeon_read_bios_from_firmware(rdev);
++	if (r == false)
++		r = radeon_atrm_get_bios(rdev);
+ 	if (r == false)
+ 		r = radeon_acpi_vfct_bios(rdev);
+ 	if (r == false)
