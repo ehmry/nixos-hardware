@@ -11,9 +11,12 @@
   # Need to set Thunderbolt to "BIOS Assist Mode"
   # https://forums.lenovo.com/t5/Other-Linux-Discussions/T480-CPU-temperature-and-fan-speed-under-linux/m-p/4114832
   boot.kernelParams = [ "acpi_backlight=native" ];
+  boot.kernelModules = [ "thinkpad_acpi fan_control=1 software_mute=0" ];
+  boot.extraModprobeConfig = "options thinkpad_acpi fan_control=1 software_mute=0";
 
   # Emulate mouse wheel on trackpoint
   # hardware.trackpoint.emulateWheel = true;
 
   services.fprintd.enable = true;
+  services.thinkfan.enable = true;
 }
